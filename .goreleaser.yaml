@@ -10,13 +10,31 @@ builds:
   - id: pins
     main: .
     binary: pins
+    # modernc.org/sqlite is pure Go. Linux and Windows need no C toolchain.
+    # The macOS keyring backend (touchid-go, go-keychain) needs cgo, so darwin
+    # builds enable it in the override below.
     env:
-      - CGO_ENABLED=0 # modernc.org/sqlite is pure Go, so no C toolchain is needed
+      - CGO_ENABLED=0
     goos: [linux, darwin, windows]
     goarch: [amd64, arm64]
     ignore:
       - goos: windows
         goarch: arm64
+    overrides:
+      - goos: darwin
+        goarch: amd64
+        env:
+          - CGO_ENABLED=1
+      - goos: darwin
+        goarch: arm64
+        env:
+          - CGO_ENABLED=1
+    # Same tags as TAGS in the Makefile: leave out keyring backends pins does not use.
+    tags:
+      - keyring_no1password
+      - keyring_nopass
+      - keyring_nopassage
+      - keyring_noprotonpass
     flags:
       - -trimpath
     ldflags:
