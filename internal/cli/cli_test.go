@@ -306,18 +306,25 @@ func TestAuthHelpExitsZero(t *testing.T) {
 	}
 }
 
-func TestImportReadsTokenFromKeyring(t *testing.T) {
+func TestImportUsesDefaultDatabasePath(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("PINS_DATABASE", "")
 	kc := keychain()
 	storeToken(kc, "user:SECRET")
 	h := newHarness(t, kc)
-	dbPath := filepath.Join(t.TempDir(), "pinboard.db")
+	dbPath := filepath.Join(home, ".local", "state", "pins", "bookmarks.db")
 
-	r := h.run("", "import", dbPath)
+	r := h.run("", "import")
 	if r.code != 0 {
 		t.Fatalf("exit %d: %s", r.code, r.stderr)
 	}
 	if !strings.Contains(r.stderr, "saved 2 posts") {
 		t.Errorf("stderr = %q", r.stderr)
+	}
+	if _, err := os.Stat(dbPath); err != nil {
+		t.Errorf("default database not created at %q: %v", dbPath, err)
 	}
 }
 
@@ -329,8 +336,9 @@ func TestImportWithoutStoredTokenFailsBeforeCreatingDatabase(t *testing.T) {
 	}
 	h := newHarness(t, keychain(), fileBackend())
 	dbPath := filepath.Join(t.TempDir(), "pinboard.db")
+	t.Setenv("PINS_DATABASE", dbPath)
 
-	r := h.run("", "import", dbPath)
+	r := h.run("", "import")
 	if r.code != 1 || !strings.Contains(r.stderr, "run `pins auth set` first") {
 		t.Fatalf("exit %d, stderr %q", r.code, r.stderr)
 	}
@@ -350,9 +358,10 @@ func TestImportFullFetchThenSince(t *testing.T) {
 	storeToken(kc, "user:SECRET")
 	h := newHarness(t, kc)
 	dbPath := filepath.Join(t.TempDir(), "pinboard.db")
+	t.Setenv("PINS_DATABASE", dbPath)
 
 	// First run: no database yet, so --since fetches everything.
-	r := h.run("", "import", dbPath, "--since")
+	r := h.run("", "import", "--since")
 	if r.code != 0 {
 		t.Fatalf("first run exit %d: %s", r.code, r.stderr)
 	}
@@ -361,7 +370,7 @@ func TestImportFullFetchThenSince(t *testing.T) {
 	}
 
 	// Second run: fetch from the newest stored post.
-	r = h.run("", "import", dbPath, "--since")
+	r = h.run("", "import", "--since")
 	if r.code != 0 {
 		t.Fatalf("second run exit %d: %s", r.code, r.stderr)
 	}
@@ -376,8 +385,9 @@ func TestImportSinceDate(t *testing.T) {
 	kc := keychain()
 	storeToken(kc, "user:SECRET")
 	h := newHarness(t, kc)
+	t.Setenv("PINS_DATABASE", filepath.Join(t.TempDir(), "p.db"))
 
-	r := h.run("", "import", filepath.Join(t.TempDir(), "p.db"), "--since-date", "2019-01-02 03:04:05")
+	r := h.run("", "import", "--since-date", "2019-01-02 03:04:05")
 	if r.code != 0 {
 		t.Fatalf("exit %d: %s", r.code, r.stderr)
 	}
@@ -391,14 +401,15 @@ func TestSearchFindsImportedBookmarksWithoutToken(t *testing.T) {
 	storeToken(kc, "user:SECRET")
 	h := newHarness(t, kc)
 	dbPath := filepath.Join(t.TempDir(), "pinboard.db")
+	t.Setenv("PINS_DATABASE", dbPath)
 
-	if r := h.run("", "import", dbPath); r.code != 0 {
+	if r := h.run("", "import"); r.code != 0 {
 		t.Fatalf("import exit %d: %s", r.code, r.stderr)
 	}
 
 	// Searching an existing database needs no API token and makes no API call.
 	search := newHarness(t, keychain())
-	r := search.run("", "search", dbPath, "example", "--limit", "1")
+	r := search.run("", "search", "example", "--limit", "1")
 	if r.code != 0 {
 		t.Fatalf("search exit %d: %s", r.code, r.stderr)
 	}
@@ -421,10 +432,10 @@ func TestSearchFindsImportedBookmarksWithoutToken(t *testing.T) {
 
 func TestSearchUsageErrors(t *testing.T) {
 	h := newHarness(t, keychain())
-	dbPath := filepath.Join(t.TempDir(), "pinboard.db")
 	for _, args := range [][]string{
-		{"search", dbPath},
-		{"search", dbPath, "example", "--limit", "0"},
+		{"search"},
+		{"search", "example", "--limit", "0"},
+		{"search", "p.db", "example"},
 	} {
 		r := h.run("", args...)
 		if r.code != 2 {
@@ -433,7 +444,8 @@ func TestSearchUsageErrors(t *testing.T) {
 	}
 
 	missingDB := filepath.Join(t.TempDir(), "missing.db")
-	r := h.run("", "search", missingDB, "example")
+	t.Setenv("PINS_DATABASE", missingDB)
+	r := h.run("", "search", "example")
 	if r.code != 2 || !strings.Contains(r.stderr, "run `pins import` first") {
 		t.Fatalf("missing database: exit %d, stderr %q", r.code, r.stderr)
 	}
@@ -447,13 +459,14 @@ func TestImportRerunDoesNotDuplicate(t *testing.T) {
 	storeToken(kc, "user:SECRET")
 	h := newHarness(t, kc)
 	dbPath := filepath.Join(t.TempDir(), "p.db")
+	t.Setenv("PINS_DATABASE", dbPath)
 
 	// The fake server ignores fromdt and always returns both posts, so re-runs
 	// must update in place rather than insert again.
 	for _, args := range [][]string{
-		{"import", dbPath},
-		{"import", dbPath},
-		{"import", dbPath, "--since"},
+		{"import"},
+		{"import"},
+		{"import", "--since"},
 	} {
 		if r := h.run("", args...); r.code != 0 {
 			t.Fatalf("%v exit %d: %s", args, r.code, r.stderr)
@@ -479,12 +492,13 @@ func TestImportUsageErrors(t *testing.T) {
 	storeToken(kc, "user:SECRET")
 	h := newHarness(t, kc)
 	db := filepath.Join(t.TempDir(), "p.db")
+	t.Setenv("PINS_DATABASE", db)
 
 	tests := map[string][]string{
-		"both since flags": {"import", db, "--since", "--since-date", "2019-01-01"},
-		"no database":      {"import"},
-		"bad since-date":   {"import", db, "--since-date", "not a date"},
-		"old -a flag":      {"import", db, "-a", "auth.json"},
+		"positional database argument": {"import", db},
+		"both since flags":             {"import", "--since", "--since-date", "2019-01-01"},
+		"bad since-date":               {"import", "--since-date", "not a date"},
+		"old -a flag":                  {"import", "-a", "auth.json"},
 	}
 	for name, args := range tests {
 		if r := h.run("", args...); r.code != 2 {
@@ -501,8 +515,9 @@ func TestImportAPIRejectedTokenDoesNotLeakIt(t *testing.T) {
 	storeToken(kc, "user:WRONG")
 	h := newHarness(t, kc)
 	dbPath := filepath.Join(t.TempDir(), "p.db")
+	t.Setenv("PINS_DATABASE", dbPath)
 
-	r := h.run("", "import", dbPath)
+	r := h.run("", "import")
 	if r.code != 1 || !strings.Contains(r.stderr, "HTTP 401") {
 		t.Fatalf("exit %d, stderr %q", r.code, r.stderr)
 	}

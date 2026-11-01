@@ -19,24 +19,31 @@ On macOS, building needs a C compiler, which the Xcode command line tools provid
 #    Paste the whole thing, e.g. yourname:XXXXXXXX.
 pins auth set
 
-# 2. Fetch everything into a database.
-pins import pinboard.db
+# 2. Fetch everything into the default database.
+pins import
 
 # 3. Later, fetch only what is new.
-pins import pinboard.db --since
+pins import --since
 
 # Or fetch everything created after a given date (UTC).
-pins import pinboard.db --since-date 2024-01-01
+pins import --since-date 2024-01-01
 
 # Search titles, notes, URLs and tags.
-pins search pinboard.db "sqlite AND indexing"
+pins search "sqlite AND indexing"
 ```
 
-Flags can appear before or after the database path.
+Both commands use `~/.local/state/pins/bookmarks.db` by default. Set `PINS_DATABASE` to use a different file, for example:
+
+```sh
+PINS_DATABASE=/path/to/bookmarks.db pins import
+PINS_DATABASE=/path/to/bookmarks.db pins search "sqlite AND indexing"
+```
+
+Search flags can appear before or after the query.
 
 `--since` and `--since-date` cannot be used together. If the database has no posts yet, `--since` fetches everything.
 
-`pins search DATABASE QUERY` uses SQLite FTS5 query syntax and returns up to 20 results as tab-separated rows with a header. Use `--limit N` to change the result count. For example, `"distributed systems"` searches for a phrase, `sqlite*` matches a prefix, and `tags:golang` searches only tags. Search ranks title matches above tags, notes and URLs. The first search builds and backfills the index for an existing database; imports keep it up to date.
+`pins search QUERY` uses SQLite FTS5 query syntax and returns up to 20 results as tab-separated rows with a header. Use `--limit N` to change the result count. For example, `"distributed systems"` searches for a phrase, `sqlite*` matches a prefix, and `tags:golang` searches only tags. Search ranks title matches above tags, notes and URLs. The first search builds and backfills the index for an existing database; imports keep it up to date.
 
 Pinboard allows `posts/all` once every five minutes, so wait between runs.
 

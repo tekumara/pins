@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"pins/internal/pinboard"
@@ -90,15 +91,18 @@ Usage:
       or from one line on stdin when stdin is not a terminal.
   pins auth unset
       Delete the stored Pinboard API token from every keyring that holds it.
-  pins import DATABASE [--since | --since-date DATE]
-      Import posts into DATABASE. Re-running updates existing posts.
-  pins search DATABASE QUERY [--limit N]
-      Search titles, notes, URLs and tags. QUERY uses FTS5 syntax.
+  pins import [--since | --since-date DATE]
+      Import posts into the default database. Re-running updates existing posts.
+  pins search QUERY [--limit N]
+      Search the default database. QUERY uses FTS5 syntax.
   pins version
 
 Options for import:
-  --since             fetch posts newer than the latest post already in DATABASE
+  --since             fetch posts newer than the latest post already in the database
   --since-date DATE   fetch posts created after DATE (YYYY-MM-DD or RFC 3339; UTC if no zone)
+
+The database defaults to ~/.local/state/pins/bookmarks.db.
+Set PINS_DATABASE to use a different database file.
 `)
 }
 
@@ -225,6 +229,18 @@ func (a *App) authUnset() error {
 	return nil
 }
 
+func databasePath() (string, error) {
+	if path := os.Getenv("PINS_DATABASE"); path != "" {
+		return path, nil
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("finding home directory: %w", err)
+	}
+	return filepath.Join(home, ".local", "state", "pins", "bookmarks.db"), nil
+}
+
 func (a *App) runPosts(ctx context.Context, args []string) error {
 	fs := newFlags("import", a.Stderr)
 	since := fs.Bool("since", false, "fetch posts newer than the latest post in the database")
@@ -233,13 +249,16 @@ func (a *App) runPosts(ctx context.Context, args []string) error {
 	if err != nil {
 		return usageOrHelp(err)
 	}
-	if len(positional) != 1 {
-		return errUsage{"import requires exactly one DATABASE argument"}
+	if len(positional) != 0 {
+		return errUsage{"import does not take a DATABASE argument"}
 	}
 	if *since && *sinceDate != "" {
 		return errUsage{"use either --since or --since-date, not both"}
 	}
-	dbPath := positional[0]
+	dbPath, err := databasePath()
+	if err != nil {
+		return err
+	}
 
 	// Read the token before opening the database, so a failure creates no file.
 	s, err := a.store()
@@ -254,6 +273,9 @@ func (a *App) runPosts(ctx context.Context, args []string) error {
 		return err
 	}
 
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+		return fmt.Errorf("creating database directory: %w", err)
+	}
 	db, err := store.Open(dbPath)
 	if err != nil {
 		return err
@@ -309,29 +331,33 @@ func (a *App) runSearch(ctx context.Context, args []string) error {
 	if err != nil {
 		return usageOrHelp(err)
 	}
-	if len(positional) != 2 {
-		return errUsage{"search requires exactly one DATABASE and one QUERY argument"}
+	if len(positional) != 1 {
+		return errUsage{"search requires exactly one QUERY argument"}
 	}
-	if strings.TrimSpace(positional[1]) == "" {
+	if strings.TrimSpace(positional[0]) == "" {
 		return errUsage{"search query cannot be empty"}
 	}
 	if *limit < 1 {
 		return errUsage{"search limit must be positive"}
 	}
 
-	if _, err := os.Stat(positional[0]); err != nil {
+	dbPath, err := databasePath()
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(dbPath); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return errUsage{fmt.Sprintf("database %q does not exist; run `pins import` first", positional[0])}
+			return errUsage{fmt.Sprintf("database %q does not exist; run `pins import` first", dbPath)}
 		}
 		return err
 	}
-	db, err := store.Open(positional[0])
+	db, err := store.Open(dbPath)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
 
-	results, err := store.Search(ctx, db, positional[1], *limit)
+	results, err := store.Search(ctx, db, positional[0], *limit)
 	if err != nil {
 		return err
 	}
