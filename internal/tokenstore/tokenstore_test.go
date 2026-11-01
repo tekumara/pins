@@ -186,9 +186,9 @@ func TestStatusReportsFirstHoldingBackend(t *testing.T) {
 	storeToken(kc, "user:SECRET")
 	s := newStore(t.TempDir(), (&fixedPrompt{}).prompt, kc, fileBackend())
 
-	typ, err := s.Status()
-	if err != nil || typ != keyring.KeychainBackend {
-		t.Fatalf("Status = %s, %v", typ, err)
+	typ, user, err := s.Status()
+	if err != nil || typ != keyring.KeychainBackend || user != "user" {
+		t.Fatalf("Status = %s, %q, %v", typ, user, err)
 	}
 }
 
@@ -198,30 +198,35 @@ func TestStatusFallsBackToGetWhenMetadataUnsupported(t *testing.T) {
 	storeToken(cred, "user:SECRET")
 	s := newStore(t.TempDir(), (&fixedPrompt{}).prompt, cred)
 
-	typ, err := s.Status()
-	if err != nil || typ != keyring.WinCredBackend {
-		t.Fatalf("Status = %s, %v", typ, err)
+	typ, user, err := s.Status()
+	if err != nil || typ != keyring.WinCredBackend || user != "user" {
+		t.Fatalf("Status = %s, %q, %v", typ, user, err)
 	}
 }
 
-func TestStatusNeverAsksForPassphrase(t *testing.T) {
+func TestStatusReadsUsernameFromEncryptedFile(t *testing.T) {
 	file := fileBackend()
 	storeToken(file, "user:SECRET")
-	p := &fixedPrompt{}
+	p := &fixedPrompt{answers: []string{"pw"}}
 	s := newStore(t.TempDir(), p.prompt, file)
 
-	if _, err := s.Status(); err != nil {
-		t.Fatal(err)
+	typ, user, err := s.Status()
+	if err != nil || typ != keyring.FileBackend || user != "user" {
+		t.Fatalf("Status = %s, %q, %v", typ, user, err)
 	}
-	if p.asked != 0 {
-		t.Errorf("Status asked for a passphrase %d times", p.asked)
+	if p.asked != 1 {
+		t.Errorf("Status asked for a passphrase %d times, want 1", p.asked)
 	}
 }
 
 func TestStatusNotStored(t *testing.T) {
-	s := newStore(t.TempDir(), (&fixedPrompt{}).prompt, keychain(), fileBackend())
-	if _, err := s.Status(); !errors.Is(err, ErrNotStored) {
+	p := &fixedPrompt{}
+	s := newStore(t.TempDir(), p.prompt, keychain(), fileBackend())
+	if _, _, err := s.Status(); !errors.Is(err, ErrNotStored) {
 		t.Fatalf("err = %v, want ErrNotStored", err)
+	}
+	if p.asked != 0 {
+		t.Errorf("Status asked for a passphrase without a token: %d times", p.asked)
 	}
 }
 
@@ -230,11 +235,12 @@ func TestStatusFindsTokenPastFailingBackend(t *testing.T) {
 	kc.MetadataErr = errors.New("keychain check failed")
 	file := fileBackend()
 	storeToken(file, "user:SECRET")
-	s := newStore(t.TempDir(), (&fixedPrompt{}).prompt, kc, file)
+	p := &fixedPrompt{answers: []string{"pw"}}
+	s := newStore(t.TempDir(), p.prompt, kc, file)
 
-	typ, err := s.Status()
-	if err != nil || typ != keyring.FileBackend {
-		t.Fatalf("Status = %s, %v", typ, err)
+	typ, user, err := s.Status()
+	if err != nil || typ != keyring.FileBackend || user != "user" {
+		t.Fatalf("Status = %s, %q, %v", typ, user, err)
 	}
 }
 
@@ -243,7 +249,7 @@ func TestStatusReportsCheckFailureWhenNothingHeld(t *testing.T) {
 	kc.MetadataErr = errors.New("keychain check failed")
 	s := newStore(t.TempDir(), (&fixedPrompt{}).prompt, kc)
 
-	_, err := s.Status()
+	_, _, err := s.Status()
 	if err == nil || errors.Is(err, ErrNotStored) || !strings.Contains(err.Error(), "keychain check failed") {
 		t.Fatalf("err = %v, want the check failure, not ErrNotStored", err)
 	}
@@ -354,8 +360,8 @@ func TestFileBackendRoundTrip(t *testing.T) {
 	if err != nil || got != "user:SECRET" {
 		t.Fatalf("Get = %q, %v", got, err)
 	}
-	if typ, err := s2.Status(); err != nil || typ != keyring.FileBackend {
-		t.Fatalf("Status = %s, %v", typ, err)
+	if typ, user, err := s2.Status(); err != nil || typ != keyring.FileBackend || user != "user" {
+		t.Fatalf("Status = %s, %q, %v", typ, user, err)
 	}
 
 	// A wrong passphrase must not return the token.
@@ -369,7 +375,7 @@ func TestFileBackendRoundTrip(t *testing.T) {
 	if err != nil || len(removed) != 1 {
 		t.Fatalf("Unset = %v, %v", removed, err)
 	}
-	if _, err := s2.Status(); !errors.Is(err, ErrNotStored) {
+	if _, _, err := s2.Status(); !errors.Is(err, ErrNotStored) {
 		t.Errorf("after unset, Status err = %v", err)
 	}
 }

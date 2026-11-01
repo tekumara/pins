@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"strings"
 
 	"github.com/byteness/keyring"
 )
@@ -118,27 +119,34 @@ func (s *Store) Set(token string) (keyring.BackendType, error) {
 	return b.typ, nil
 }
 
-// Status returns the first backend that holds the token, or ErrNotStored. It
-// never asks for the file passphrase.
+// Status returns the first backend that holds the token and its username, or
+// ErrNotStored. It reads the token to extract the username, so an encrypted
+// file backend asks for its passphrase when it contains a token. The token is
+// never returned.
 //
 // If no backend holds the token and some backend failed to check, Status
 // returns those failures instead of ErrNotStored.
-func (s *Store) Status() (keyring.BackendType, error) {
+func (s *Store) Status() (keyring.BackendType, string, error) {
 	var errs []error
 	for _, b := range s.usable(s.prompt) {
-		held, err := holds(b.kr)
+		token, held, err := tokenIfHeld(b.kr)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("checking %s: %w", s.Name(b.typ), err))
 			continue
 		}
-		if held {
-			return b.typ, nil
+		if !held {
+			continue
 		}
+		user, secret, ok := strings.Cut(token, ":")
+		if !ok || user == "" || secret == "" {
+			return "", "", fmt.Errorf("stored Pinboard token in %s has invalid username:TOKEN format", s.Name(b.typ))
+		}
+		return b.typ, user, nil
 	}
 	if len(errs) > 0 {
-		return "", errors.Join(errs...)
+		return "", "", errors.Join(errs...)
 	}
-	return "", ErrNotStored
+	return "", "", ErrNotStored
 }
 
 // Unset deletes the token from every usable backend. It tries every backend
@@ -191,6 +199,30 @@ func (s *Store) usable(pass keyring.PromptFunc) []backend {
 func (s *Store) dirExists() bool {
 	info, err := os.Stat(s.dir)
 	return err == nil && info.IsDir()
+}
+
+// tokenIfHeld returns the token if kr holds it. Metadata lets it skip reading
+// the token when the item is absent, so encrypted files do not prompt unless
+// they actually contain one.
+func tokenIfHeld(kr keyring.Keyring) (string, bool, error) {
+	_, err := kr.GetMetadata(ItemKey)
+	if err != nil &&
+		!errors.Is(err, keyring.ErrMetadataNotSupported) &&
+		!errors.Is(err, keyring.ErrMetadataNeedsCredentials) {
+		if missing(err) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+
+	item, err := kr.Get(ItemKey)
+	if missing(err) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return string(item.Data), true, nil
 }
 
 // holds reports whether kr has the token. It uses metadata where the backend

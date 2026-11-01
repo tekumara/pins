@@ -54,11 +54,11 @@ Pinboard allows `posts/all` once every five minutes, so wait between runs.
 `pins import` reads the token from the store. It never reads `auth.json`.
 
 ```sh
-pins auth status   # shows which store holds the token; exits 1 if none
+pins auth status   # shows the username and store; exits 1 if none
 pins auth unset    # deletes the token from every store that holds it
 ```
 
-`pins auth set` reads the token from a hidden prompt. In a script, pipe it in as one line: `echo 'yourname:XXXXXXXX' | pins auth set`. Set writes to the store that is in use, and removes any copy from the others. With the encrypted file, you enter the passphrase twice. Every later `import` asks for it once.
+`pins auth set` reads the token from a hidden prompt. In a script, pipe it in as one line: `echo 'yourname:XXXXXXXX' | pins auth set`. Set writes to the store that is in use, and removes any copy from the others. With the encrypted file, you enter the passphrase twice. `auth status` and every later `import` ask for it once when they need to read the token.
 
 Earlier versions saved the token to `auth.json` and took `-a/--auth`. Those are gone. `pins` does not read or delete `auth.json`. To finish moving, run `pins auth set`, then delete `auth.json`.
 

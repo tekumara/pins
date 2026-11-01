@@ -84,7 +84,7 @@ func (a *App) usage(w io.Writer) {
 
 Usage:
   pins auth status
-      Show where your Pinboard API token is stored. Exits 1 if none is stored.
+      Show the username and where your Pinboard API token is stored. Exits 1 if none is stored.
   pins auth set
       Store your Pinboard API token (username:TOKEN). Reads it from the terminal,
       or from one line on stdin when stdin is not a terminal.
@@ -152,20 +152,20 @@ func (a *App) runAuth(args []string) error {
 	}
 }
 
-// authStatus reports which backend holds the token. It never prints the token.
+// authStatus reports the username and backend. It never prints the token.
 func (a *App) authStatus() error {
 	s, err := a.store()
 	if err != nil {
 		return err
 	}
-	typ, err := s.Status()
+	typ, user, err := s.Status()
 	if errors.Is(err, tokenstore.ErrNotStored) {
 		return fmt.Errorf("%w; run `pins auth set` to store one", err)
 	}
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(a.Stdout, "Pinboard token is stored in %s.\n", s.Name(typ))
+	fmt.Fprintf(a.Stdout, "Pinboard token for %q is stored in %s.\n", user, s.Name(typ))
 	return nil
 }
 

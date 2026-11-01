@@ -186,7 +186,7 @@ func TestAuthStatusReportsBackendWithoutPrintingToken(t *testing.T) {
 	if r.code != 0 {
 		t.Fatalf("exit %d: %s", r.code, r.stderr)
 	}
-	if r.stdout != "Pinboard token is stored in macOS Keychain.\n" {
+	if r.stdout != "Pinboard token for \"user\" is stored in macOS Keychain.\n" {
 		t.Errorf("stdout = %q", r.stdout)
 	}
 	if strings.Contains(r.stdout+r.stderr, "SECRET") {
@@ -206,18 +206,17 @@ func TestAuthStatusNothingStored(t *testing.T) {
 	}
 }
 
-func TestAuthStatusNeedsNoFilePassphrase(t *testing.T) {
-	// The file backend's prompt fails on a non-terminal, so passing shows status never asked for it.
+func TestAuthStatusNeedsPassphraseForEncryptedFile(t *testing.T) {
 	file := fileBackend()
 	storeToken(file, "user:SECRET")
 	h := newHarness(t, file)
 
 	r := h.run("", "auth", "status")
-	if r.code != 0 {
-		t.Fatalf("exit %d: %s", r.code, r.stderr)
+	if r.code != 1 || !strings.Contains(r.stderr, "not a terminal") {
+		t.Fatalf("exit %d, stderr %q", r.code, r.stderr)
 	}
-	if !strings.Contains(r.stdout, "encrypted file") {
-		t.Errorf("stdout = %q", r.stdout)
+	if r.stdout != "" {
+		t.Errorf("stdout = %q, want no status without reading the encrypted token", r.stdout)
 	}
 }
 
