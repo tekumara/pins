@@ -1,0 +1,4 @@
+/pins
+dist/
+*.db
+auth.json

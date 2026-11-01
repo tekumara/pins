@@ -1,0 +1,36 @@
+version: 2
+
+project_name: pins
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: pins
+    main: .
+    binary: pins
+    env:
+      - CGO_ENABLED=0 # modernc.org/sqlite is pure Go, so no C toolchain is needed
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
