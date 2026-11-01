@@ -4,10 +4,12 @@ package cli
 import (
 	"bufio"
 	"context"
+	"encoding/csv"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"pins/internal/pinboard"
@@ -48,6 +50,8 @@ func (a *App) Run(ctx context.Context, args []string) int {
 		err = a.runAuth(args[1:])
 	case "import":
 		err = a.runPosts(ctx, args[1:])
+	case "search":
+		err = a.runSearch(ctx, args[1:])
 	case "version", "--version":
 		fmt.Fprintln(a.Stdout, a.Version)
 	case "help", "-h", "--help":
@@ -88,6 +92,8 @@ Usage:
       Delete the stored Pinboard API token from every keyring that holds it.
   pins import DATABASE [--since | --since-date DATE]
       Import posts into DATABASE. Re-running updates existing posts.
+  pins search DATABASE QUERY [--limit N]
+      Search titles, notes, URLs and tags. QUERY uses FTS5 syntax.
   pins version
 
 Options for import:
@@ -294,6 +300,58 @@ func (a *App) runPosts(ctx context.Context, args []string) error {
 	}
 	fmt.Fprintf(a.Stderr, "saved %d posts to %s\n", w.Count(), dbPath)
 	return nil
+}
+
+func (a *App) runSearch(ctx context.Context, args []string) error {
+	fs := newFlags("search", a.Stderr)
+	limit := fs.Int("limit", 20, "maximum number of results")
+	positional, err := parseInterleaved(fs, args)
+	if err != nil {
+		return usageOrHelp(err)
+	}
+	if len(positional) != 2 {
+		return errUsage{"search requires exactly one DATABASE and one QUERY argument"}
+	}
+	if strings.TrimSpace(positional[1]) == "" {
+		return errUsage{"search query cannot be empty"}
+	}
+	if *limit < 1 {
+		return errUsage{"search limit must be positive"}
+	}
+
+	if _, err := os.Stat(positional[0]); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return errUsage{fmt.Sprintf("database %q does not exist; run `pins import` first", positional[0])}
+		}
+		return err
+	}
+	db, err := store.Open(positional[0])
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	results, err := store.Search(ctx, db, positional[1], *limit)
+	if err != nil {
+		return err
+	}
+	return writeSearchResults(a.Stdout, results)
+}
+
+// writeSearchResults writes a tab-separated table, quoting values that contain tabs or newlines.
+func writeSearchResults(w io.Writer, results []store.SearchResult) error {
+	out := csv.NewWriter(w)
+	out.Comma = '\t'
+	if err := out.Write([]string{"HASH", "TITLE", "URL", "TAGS", "TIME"}); err != nil {
+		return err
+	}
+	for _, result := range results {
+		if err := out.Write([]string{result.Hash, result.Description, result.Href, result.Tags, result.Time}); err != nil {
+			return err
+		}
+	}
+	out.Flush()
+	return out.Error()
 }
 
 // parseInterleaved parses flags that may appear before, between or after positional

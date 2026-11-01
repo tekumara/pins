@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/csv"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -383,6 +384,62 @@ func TestImportSinceDate(t *testing.T) {
 	}
 	if calls := h.pinboard.calls(); len(calls) != 1 || calls[0] != "2019-01-02T03:04:05Z" {
 		t.Fatalf("fromdt calls = %q", calls)
+	}
+}
+
+func TestSearchFindsImportedBookmarksWithoutToken(t *testing.T) {
+	kc := keychain()
+	storeToken(kc, "user:SECRET")
+	h := newHarness(t, kc)
+	dbPath := filepath.Join(t.TempDir(), "pinboard.db")
+
+	if r := h.run("", "import", dbPath); r.code != 0 {
+		t.Fatalf("import exit %d: %s", r.code, r.stderr)
+	}
+
+	// Searching an existing database needs no API token and makes no API call.
+	search := newHarness(t, keychain())
+	r := search.run("", "search", dbPath, "example", "--limit", "1")
+	if r.code != 0 {
+		t.Fatalf("search exit %d: %s", r.code, r.stderr)
+	}
+	reader := csv.NewReader(strings.NewReader(r.stdout))
+	reader.Comma = '\t'
+	rows, err := reader.ReadAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 || strings.Join(rows[0], ",") != "HASH,TITLE,URL,TAGS,TIME" {
+		t.Fatalf("search output rows = %q", rows)
+	}
+	if rows[1][0] == "" || rows[1][1] == "" || rows[1][2] == "" {
+		t.Fatalf("search result is missing bookmark fields: %q", rows[1])
+	}
+	if len(search.pinboard.calls()) != 0 {
+		t.Fatalf("search called the Pinboard API: %q", search.pinboard.calls())
+	}
+}
+
+func TestSearchUsageErrors(t *testing.T) {
+	h := newHarness(t, keychain())
+	dbPath := filepath.Join(t.TempDir(), "pinboard.db")
+	for _, args := range [][]string{
+		{"search", dbPath},
+		{"search", dbPath, "example", "--limit", "0"},
+	} {
+		r := h.run("", args...)
+		if r.code != 2 {
+			t.Errorf("%v: exit %d, want 2 (stderr %q)", args, r.code, r.stderr)
+		}
+	}
+
+	missingDB := filepath.Join(t.TempDir(), "missing.db")
+	r := h.run("", "search", missingDB, "example")
+	if r.code != 2 || !strings.Contains(r.stderr, "run `pins import` first") {
+		t.Fatalf("missing database: exit %d, stderr %q", r.code, r.stderr)
+	}
+	if _, err := os.Stat(missingDB); !os.IsNotExist(err) {
+		t.Errorf("search created missing database: %v", err)
 	}
 }
 

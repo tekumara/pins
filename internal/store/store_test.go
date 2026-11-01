@@ -140,6 +140,90 @@ func TestBadTimeIsAnError(t *testing.T) {
 	}
 }
 
+func TestSearchBackfillsExistingRowsAndTracksUpserts(t *testing.T) {
+	db := openTemp(t)
+	_, err := db.Exec(`
+CREATE TABLE posts (
+    hash TEXT PRIMARY KEY, href TEXT, description TEXT, extended TEXT, meta TEXT,
+    time TEXT, shared INTEGER, toread INTEGER, tags TEXT
+);
+INSERT INTO posts (hash, href, description, extended, meta, time, shared, toread, tags)
+VALUES ('h1', 'https://example.com/h1', 'legacy comet', 'old notes', 'm',
+        '2019-11-06T22:50:31+00:00', 1, 0, '["older"]')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+	got, err := Search(ctx, db, "legacy", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Hash != "h1" || got[0].Description != "legacy comet" {
+		t.Fatalf("backfilled search = %+v, want the existing bookmark", got)
+	}
+
+	save(t, db, post("h1", "new nebula", "no", "no", "golang"))
+	got, err = Search(ctx, db, "legacy", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("old title still matches after upsert: %+v", got)
+	}
+	got, err = Search(ctx, db, "nebula", 10)
+	if err != nil || len(got) != 1 || got[0].Hash != "h1" {
+		t.Fatalf("updated title search = %+v, %v; want h1", got, err)
+	}
+	got, err = Search(ctx, db, "tags:golang", 10)
+	if err != nil || len(got) != 1 || got[0].Hash != "h1" {
+		t.Fatalf("tag search = %+v, %v; want h1", got, err)
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := NewWriter(ctx, tx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Upsert(post("h1", "rolledback quartz", "no", "no", "")); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	got, err = Search(ctx, db, "quartz", 10)
+	if err != nil || len(got) != 0 {
+		t.Fatalf("rolled-back title search = %+v, %v; want no matches", got, err)
+	}
+	got, err = Search(ctx, db, "nebula", 10)
+	if err != nil || len(got) != 1 || got[0].Hash != "h1" {
+		t.Fatalf("search after rollback = %+v, %v; want h1", got, err)
+	}
+}
+
+func TestSearchRanksTitleMatchesAheadOfNotes(t *testing.T) {
+	db := openTemp(t)
+	titleMatch := post("title", "quartz", "no", "no", "")
+	titleMatch.Extended = "ordinary notes"
+	notesMatch := post("notes", "ordinary title", "no", "no", "")
+	notesMatch.Extended = "quartz"
+	save(t, db, titleMatch, notesMatch)
+
+	got, err := Search(context.Background(), db, "quartz", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].Hash != "title" {
+		t.Fatalf("search order = %+v, want title match before notes match", got)
+	}
+}
+
 func TestLatestTime(t *testing.T) {
 	db := openTemp(t)
 	ctx := context.Background()
