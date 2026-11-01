@@ -91,7 +91,7 @@ Usage:
       or from one line on stdin when stdin is not a terminal.
   pins auth unset
       Delete the stored Pinboard API token from every keyring that holds it.
-  pins import [--since | --since-date DATE]
+  pins import [--since | --since-date DATE] [--skip-private]
       Import posts into the default database. Re-running updates existing posts.
   pins search QUERY [--limit N]
       Search the default database. QUERY uses FTS5 syntax.
@@ -100,6 +100,7 @@ Usage:
 Options for import:
   --since             fetch posts newer than the latest post already in the database
   --since-date DATE   fetch posts created after DATE (YYYY-MM-DD or RFC 3339; UTC if no zone)
+  --skip-private      skip private bookmarks
 
 The database defaults to ~/.local/state/pins/bookmarks.db.
 Set PINS_DATABASE to use a different database file.
@@ -245,6 +246,7 @@ func (a *App) runPosts(ctx context.Context, args []string) error {
 	fs := newFlags("import", a.Stderr)
 	since := fs.Bool("since", false, "fetch posts newer than the latest post in the database")
 	sinceDate := fs.String("since-date", "", "fetch posts created after DATE")
+	skipPrivate := fs.Bool("skip-private", false, "skip private bookmarks")
 	positional, err := parseInterleaved(fs, args)
 	if err != nil {
 		return usageOrHelp(err)
@@ -314,7 +316,16 @@ func (a *App) runPosts(ctx context.Context, args []string) error {
 	}
 	defer w.Close()
 
-	if err := client.AllPosts(ctx, fromdt, w.Upsert); err != nil {
+	savePost := w.Upsert
+	if *skipPrivate {
+		savePost = func(p pinboard.Post) error {
+			if p.Shared == "no" {
+				return nil
+			}
+			return w.Upsert(p)
+		}
+	}
+	if err := client.AllPosts(ctx, fromdt, savePost); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {

@@ -328,6 +328,47 @@ func TestImportUsesDefaultDatabasePath(t *testing.T) {
 	}
 }
 
+func TestImportSkipsPrivatePosts(t *testing.T) {
+	kc := keychain()
+	storeToken(kc, "user:SECRET")
+	h := newHarness(t, kc)
+	dbPath := filepath.Join(t.TempDir(), "p.db")
+	t.Setenv("PINS_DATABASE", dbPath)
+
+	r := h.run("", "import", "--skip-private")
+	if r.code != 0 {
+		t.Fatalf("exit %d: %s", r.code, r.stderr)
+	}
+	if !strings.Contains(r.stderr, "saved 1 posts") {
+		t.Errorf("stderr = %q, want one saved post", r.stderr)
+	}
+
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	rows, err := db.Query(`SELECT hash FROM posts ORDER BY hash`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var hashes []string
+	for rows.Next() {
+		var hash string
+		if err := rows.Scan(&hash); err != nil {
+			t.Fatal(err)
+		}
+		hashes = append(hashes, hash)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if len(hashes) != 1 || hashes[0] != "h1" {
+		t.Fatalf("stored hashes = %q, want only public bookmark h1", hashes)
+	}
+}
+
 func TestImportWithoutStoredTokenFailsBeforeCreatingDatabase(t *testing.T) {
 	t.Chdir(t.TempDir())
 	// An auth.json with a valid token must be ignored.
