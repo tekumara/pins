@@ -43,7 +43,7 @@ func (a *App) Run(ctx context.Context, args []string) int {
 	switch args[0] {
 	case "auth":
 		err = a.runAuth(args[1:])
-	case "posts":
+	case "import":
 		err = a.runPosts(ctx, args[1:])
 	case "version", "--version":
 		fmt.Fprintln(a.Stdout, a.Version)
@@ -78,11 +78,11 @@ func (a *App) usage(w io.Writer) {
 Usage:
   pins auth [-a AUTH]
       Prompt for your Pinboard API token and save it to AUTH (default auth.json).
-  pins posts DATABASE [-a AUTH] [--since | --since-date DATE]
-      Fetch posts into DATABASE. Re-running updates existing posts.
+  pins import DATABASE [-a AUTH] [--since | --since-date DATE]
+      Import posts into DATABASE. Re-running updates existing posts.
   pins version
 
-Options for posts:
+Options for import:
   --since             fetch posts newer than the latest post already in DATABASE
   --since-date DATE   fetch posts created after DATE (YYYY-MM-DD or RFC 3339; UTC if no zone)
 `)
@@ -189,7 +189,7 @@ func readToken(path string) (string, error) {
 }
 
 func (a *App) runPosts(ctx context.Context, args []string) error {
-	fs := newFlags("posts", a.Stderr)
+	fs := newFlags("import", a.Stderr)
 	authPath := authFlag(fs, "path to read auth token from")
 	since := fs.Bool("since", false, "fetch posts newer than the latest post in the database")
 	sinceDate := fs.String("since-date", "", "fetch posts created after DATE")
@@ -198,7 +198,7 @@ func (a *App) runPosts(ctx context.Context, args []string) error {
 		return usageOrHelp(err)
 	}
 	if len(positional) != 1 {
-		return errUsage{"posts requires exactly one DATABASE argument"}
+		return errUsage{"import requires exactly one DATABASE argument"}
 	}
 	if *since && *sinceDate != "" {
 		return errUsage{"use either --since or --since-date, not both"}

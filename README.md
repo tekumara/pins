@@ -18,13 +18,13 @@ go build -o pins .
 pins auth                  # writes auth.json (mode 0600)
 
 # 2. Fetch everything into a database.
-pins posts pinboard.db
+pins import pinboard.db
 
 # 3. Later, fetch only what is new.
-pins posts pinboard.db --since
+pins import pinboard.db --since
 
 # Or fetch everything created after a given date (UTC).
-pins posts pinboard.db --since-date 2024-01-01
+pins import pinboard.db --since-date 2024-01-01
 ```
 
 Flags can appear before or after the database path. `-a/--auth` selects a different token file.

@@ -121,7 +121,7 @@ func TestAuthRejectsTokenWithoutUsername(t *testing.T) {
 	}
 }
 
-func TestPostsFullFetchThenSince(t *testing.T) {
+func TestImportFullFetchThenSince(t *testing.T) {
 	dir := t.TempDir()
 	auth := filepath.Join(dir, "auth.json")
 	dbPath := filepath.Join(dir, "pinboard.db")
@@ -129,7 +129,7 @@ func TestPostsFullFetchThenSince(t *testing.T) {
 	f := newFakePinboard(t)
 
 	// First run: no database yet, so --since fetches everything.
-	r := run(t, f, "", "posts", dbPath, "-a", auth, "--since")
+	r := run(t, f, "", "import", dbPath, "-a", auth, "--since")
 	if r.code != 0 {
 		t.Fatalf("first run exit %d: %s", r.code, r.stderr)
 	}
@@ -138,7 +138,7 @@ func TestPostsFullFetchThenSince(t *testing.T) {
 	}
 
 	// Second run: fetch from the newest stored post.
-	r = run(t, f, "", "posts", dbPath, "-a", auth, "--since")
+	r = run(t, f, "", "import", dbPath, "-a", auth, "--since")
 	if r.code != 0 {
 		t.Fatalf("second run exit %d: %s", r.code, r.stderr)
 	}
@@ -149,13 +149,13 @@ func TestPostsFullFetchThenSince(t *testing.T) {
 	}
 }
 
-func TestPostsSinceDate(t *testing.T) {
+func TestImportSinceDate(t *testing.T) {
 	dir := t.TempDir()
 	auth := filepath.Join(dir, "auth.json")
 	writeAuth(t, auth)
 	f := newFakePinboard(t)
 
-	r := run(t, f, "", "posts", filepath.Join(dir, "p.db"), "-a", auth, "--since-date", "2019-01-02 03:04:05")
+	r := run(t, f, "", "import", filepath.Join(dir, "p.db"), "-a", auth, "--since-date", "2019-01-02 03:04:05")
 	if r.code != 0 {
 		t.Fatalf("exit %d: %s", r.code, r.stderr)
 	}
@@ -164,7 +164,7 @@ func TestPostsSinceDate(t *testing.T) {
 	}
 }
 
-func TestPostsRerunDoesNotDuplicate(t *testing.T) {
+func TestImportRerunDoesNotDuplicate(t *testing.T) {
 	dir := t.TempDir()
 	auth := filepath.Join(dir, "auth.json")
 	dbPath := filepath.Join(dir, "p.db")
@@ -174,9 +174,9 @@ func TestPostsRerunDoesNotDuplicate(t *testing.T) {
 	// The fake server ignores fromdt and always returns both posts, so re-runs
 	// must update in place rather than insert again.
 	for _, args := range [][]string{
-		{"posts", dbPath, "-a", auth},
-		{"posts", dbPath, "-a", auth},
-		{"posts", dbPath, "-a", auth, "--since"},
+		{"import", dbPath, "-a", auth},
+		{"import", dbPath, "-a", auth},
+		{"import", dbPath, "-a", auth, "--since"},
 	} {
 		if r := run(t, f, "", args...); r.code != 0 {
 			t.Fatalf("%v exit %d: %s", args, r.code, r.stderr)
@@ -197,7 +197,7 @@ func TestPostsRerunDoesNotDuplicate(t *testing.T) {
 	}
 }
 
-func TestPostsUsageErrors(t *testing.T) {
+func TestImportUsageErrors(t *testing.T) {
 	dir := t.TempDir()
 	auth := filepath.Join(dir, "auth.json")
 	writeAuth(t, auth)
@@ -205,9 +205,9 @@ func TestPostsUsageErrors(t *testing.T) {
 	db := filepath.Join(dir, "p.db")
 
 	tests := map[string][]string{
-		"both since flags": {"posts", db, "-a", auth, "--since", "--since-date", "2019-01-01"},
-		"no database":      {"posts", "-a", auth},
-		"bad since-date":   {"posts", db, "-a", auth, "--since-date", "not a date"},
+		"both since flags": {"import", db, "-a", auth, "--since", "--since-date", "2019-01-01"},
+		"no database":      {"import", "-a", auth},
+		"bad since-date":   {"import", db, "-a", auth, "--since-date", "not a date"},
 	}
 	for name, args := range tests {
 		if r := run(t, f, "", args...); r.code != 2 {
@@ -219,15 +219,15 @@ func TestPostsUsageErrors(t *testing.T) {
 	}
 }
 
-func TestPostsMissingAuthFile(t *testing.T) {
+func TestImportMissingAuthFile(t *testing.T) {
 	dir := t.TempDir()
-	r := run(t, newFakePinboard(t), "", "posts", filepath.Join(dir, "p.db"), "-a", filepath.Join(dir, "nope.json"))
+	r := run(t, newFakePinboard(t), "", "import", filepath.Join(dir, "p.db"), "-a", filepath.Join(dir, "nope.json"))
 	if r.code != 1 || !strings.Contains(r.stderr, "run `pins auth` first") {
 		t.Fatalf("exit %d, stderr %q", r.code, r.stderr)
 	}
 }
 
-func TestPostsAPIRejectedTokenLeavesDatabaseUntouched(t *testing.T) {
+func TestImportAPIRejectedTokenLeavesDatabaseUntouched(t *testing.T) {
 	dir := t.TempDir()
 	auth := filepath.Join(dir, "auth.json")
 	dbPath := filepath.Join(dir, "p.db")
@@ -235,7 +235,7 @@ func TestPostsAPIRejectedTokenLeavesDatabaseUntouched(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r := run(t, newFakePinboard(t), "", "posts", dbPath, "-a", auth)
+	r := run(t, newFakePinboard(t), "", "import", dbPath, "-a", auth)
 	if r.code != 1 || !strings.Contains(r.stderr, "HTTP 401") {
 		t.Fatalf("exit %d, stderr %q", r.code, r.stderr)
 	}
