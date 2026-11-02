@@ -325,7 +325,17 @@ func (a *App) runPosts(ctx context.Context, args []string) error {
 			return w.Upsert(p)
 		}
 	}
-	if err := client.AllPosts(ctx, fromdt, savePost); err != nil {
+	processed := 0
+	if err := client.AllPosts(ctx, fromdt, func(p pinboard.Post) error {
+		if err := savePost(p); err != nil {
+			return err
+		}
+		processed++
+		if processed%1000 == 0 {
+			fmt.Fprintf(a.Stderr, "processed %d bookmarks\n", processed)
+		}
+		return nil
+	}); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {

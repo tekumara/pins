@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/csv"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -30,21 +31,23 @@ const apiPosts = `[
 type fakePinboard struct {
 	mu      sync.Mutex
 	fromdts []string
+	posts   string
 	srv     *httptest.Server
 }
 
 func newFakePinboard(t *testing.T) *fakePinboard {
 	t.Helper()
-	f := &fakePinboard{}
+	f := &fakePinboard{posts: apiPosts}
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		f.fromdts = append(f.fromdts, r.URL.Query().Get("fromdt"))
+		posts := f.posts
 		f.mu.Unlock()
 		if r.URL.Query().Get("auth_token") != "user:SECRET" {
 			http.Error(w, "bad token", http.StatusUnauthorized)
 			return
 		}
-		w.Write([]byte(apiPosts))
+		w.Write([]byte(posts))
 	}))
 	t.Cleanup(f.srv.Close)
 	return f
@@ -325,6 +328,43 @@ func TestImportUsesDefaultDatabasePath(t *testing.T) {
 	}
 	if _, err := os.Stat(dbPath); err != nil {
 		t.Errorf("default database not created at %q: %v", dbPath, err)
+	}
+}
+
+func TestImportReportsProgressEvery1000Bookmarks(t *testing.T) {
+	kc := keychain()
+	storeToken(kc, "user:SECRET")
+	h := newHarness(t, kc)
+	dbPath := filepath.Join(t.TempDir(), "p.db")
+	t.Setenv("PINS_DATABASE", dbPath)
+
+	var posts strings.Builder
+	posts.WriteByte('[')
+	for i := 1; i <= 2001; i++ {
+		if i > 1 {
+			posts.WriteByte(',')
+		}
+		fmt.Fprintf(&posts, `{"href":"https://example.com/%d","description":"Bookmark %d","extended":"","meta":"","hash":"h%d","time":"2019-11-06T22:50:31Z","shared":"yes","toread":"no","tags":""}`, i, i, i)
+	}
+	posts.WriteByte(']')
+	h.pinboard.mu.Lock()
+	h.pinboard.posts = posts.String()
+	h.pinboard.mu.Unlock()
+
+	r := h.run("", "import")
+	if r.code != 0 {
+		t.Fatalf("exit %d: %s", r.code, r.stderr)
+	}
+	for _, want := range []string{"processed 1000 bookmarks", "processed 2000 bookmarks"} {
+		if !strings.Contains(r.stderr, want) {
+			t.Errorf("stderr = %q, want progress %q", r.stderr, want)
+		}
+	}
+	if strings.Contains(r.stderr, "processed 2001 bookmarks") {
+		t.Errorf("stderr reports progress before the next 1000-bookmark interval: %q", r.stderr)
+	}
+	if !strings.Contains(r.stderr, "saved 2001 posts") {
+		t.Errorf("stderr = %q, want final saved count", r.stderr)
 	}
 }
 
