@@ -13,9 +13,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"pins/internal/pinboard"
-	"pins/internal/store"
-	"pins/internal/tokenstore"
+	"github.com/tekumara/pins/internal/pinboard"
+	"github.com/tekumara/pins/internal/store"
+	"github.com/tekumara/pins/internal/tokenstore"
 )
 
 // App holds the process-level dependencies, so tests can substitute them.

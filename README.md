@@ -4,13 +4,31 @@ Import and search your Pinboard bookmarks locally with full-text search across t
 
 ## Install
 
-Download a release from the releases page, or build from a checkout with the Go version in `go.mod`:
+Choose one of these installation methods.
+
+### Install with mise
+
+Use [mise](https://mise.jdx.dev/) to install the latest prebuilt release:
 
 ```sh
-go build -o pins .
+mise use -g github:tekumara/pins@latest
 ```
 
+### Install from source
+
+Use Go 1.27.3 or later to install the latest source from GitHub:
+
+```sh
+go install github.com/tekumara/pins@latest
+```
+
+`go install` puts the `pins` executable in `GOBIN`, or in `GOPATH/bin` if `GOBIN` is not set. Add that directory to your `PATH` if needed.
+
 On macOS, building needs a C compiler, which the Xcode command line tools provide. Linux and Windows builds need none.
+
+### Download a release
+
+Download a prebuilt archive from [GitHub Releases](https://github.com/tekumara/pins/releases/latest).
 
 ## Usage
 

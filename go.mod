@@ -1,4 +1,4 @@
-module pins
+module github.com/tekumara/pins
 
 go 1.27.3
 

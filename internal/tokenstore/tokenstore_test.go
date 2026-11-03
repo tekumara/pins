@@ -9,7 +9,7 @@ import (
 
 	"github.com/byteness/keyring"
 
-	"pins/internal/keyringtest"
+	"github.com/tekumara/pins/internal/keyringtest"
 )
 
 // These tests use only in-memory fakes, apart from TestFileBackendRoundTrip,

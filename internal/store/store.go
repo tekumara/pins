@@ -11,7 +11,7 @@ import (
 
 	_ "modernc.org/sqlite" // pure-Go SQLite driver, no cgo
 
-	"pins/internal/pinboard"
+	"github.com/tekumara/pins/internal/pinboard"
 )
 
 // storedTimeLayout is an ISO 8601/RFC3339 timestamp e.g. 2019-11-06T22:50:31+00:00.

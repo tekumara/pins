@@ -7,8 +7,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"pins/internal/cli"
-	"pins/internal/pinboard"
+	"github.com/tekumara/pins/internal/cli"
+	"github.com/tekumara/pins/internal/pinboard"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".

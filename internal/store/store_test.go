@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"testing"
 
-	"pins/internal/pinboard"
+	"github.com/tekumara/pins/internal/pinboard"
 )
 
 func openTemp(t *testing.T) *sql.DB {

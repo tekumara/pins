@@ -16,8 +16,8 @@ import (
 
 	"github.com/byteness/keyring"
 
-	"pins/internal/keyringtest"
-	"pins/internal/tokenstore"
+	"github.com/tekumara/pins/internal/keyringtest"
+	"github.com/tekumara/pins/internal/tokenstore"
 
 	_ "modernc.org/sqlite"
 )
