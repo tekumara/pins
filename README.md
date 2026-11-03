@@ -1,6 +1,6 @@
 # pins
 
-Import and search your Pinboard bookmarks with full-text search across titles, notes, URLs and tags. Sync new bookmarks incrementally, skip private bookmarks, and store your API token securely.
+Import and search your Pinboard bookmarks locally with full-text search across titles, notes, URLs and tags. Sync new bookmarks incrementally, skip private bookmarks, and store your API token securely.
 
 ## Install
 
