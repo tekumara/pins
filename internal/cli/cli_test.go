@@ -331,7 +331,7 @@ func TestImportUsesDefaultDatabasePath(t *testing.T) {
 	}
 }
 
-func TestImportReportsProgressEvery1000Bookmarks(t *testing.T) {
+func TestImportReportsProgressAtMilestones(t *testing.T) {
 	kc := keychain()
 	storeToken(kc, "user:SECRET")
 	h := newHarness(t, kc)
@@ -340,7 +340,7 @@ func TestImportReportsProgressEvery1000Bookmarks(t *testing.T) {
 
 	var posts strings.Builder
 	posts.WriteByte('[')
-	for i := 1; i <= 2001; i++ {
+	for i := 1; i <= 10001; i++ {
 		if i > 1 {
 			posts.WriteByte(',')
 		}
@@ -355,15 +355,22 @@ func TestImportReportsProgressEvery1000Bookmarks(t *testing.T) {
 	if r.code != 0 {
 		t.Fatalf("exit %d: %s", r.code, r.stderr)
 	}
-	for _, want := range []string{"processed 1000 bookmarks", "processed 2000 bookmarks"} {
-		if !strings.Contains(r.stderr, want) {
-			t.Errorf("stderr = %q, want progress %q", r.stderr, want)
+	var gotProgress []string
+	for _, line := range strings.Split(strings.TrimSpace(r.stderr), "\n") {
+		if strings.HasPrefix(line, "processed ") {
+			gotProgress = append(gotProgress, line)
 		}
 	}
-	if strings.Contains(r.stderr, "processed 2001 bookmarks") {
-		t.Errorf("stderr reports progress before the next 1000-bookmark interval: %q", r.stderr)
+	wantProgress := []string{
+		"processed 1 bookmarks",
+		"processed 1000 bookmarks",
+		"processed 5000 bookmarks",
+		"processed 10000 bookmarks",
 	}
-	if !strings.Contains(r.stderr, "saved 2001 posts") {
+	if strings.Join(gotProgress, "\n") != strings.Join(wantProgress, "\n") {
+		t.Errorf("progress = %q, want %q", gotProgress, wantProgress)
+	}
+	if !strings.Contains(r.stderr, "saved 10001 posts") {
 		t.Errorf("stderr = %q, want final saved count", r.stderr)
 	}
 }

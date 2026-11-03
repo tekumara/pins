@@ -331,7 +331,7 @@ func (a *App) runPosts(ctx context.Context, args []string) error {
 			return err
 		}
 		processed++
-		if processed%1000 == 0 {
+		if processed == 1 || processed == 1000 || processed%5000 == 0 {
 			fmt.Fprintf(a.Stderr, "processed %d bookmarks\n", processed)
 		}
 		return nil
