@@ -16,6 +16,15 @@ cgo is enabled for darwin only. Linux and Windows builds use `CGO_ENABLED=0`. Th
 
 The GoReleaser config (`.goreleaser.yaml`) sets the same tags, so release binaries match `make`.
 
+## Releasing
+
+Push a version tag to run the release workflow. It runs `make test`, then GoReleaser publishes the platform archives and checksums to GitHub Releases:
+
+```sh
+git tag -a v1.2.3 -m "v1.2.3"
+git push origin v1.2.3
+```
+
 ## Project layout
 
 ```text
