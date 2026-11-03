@@ -20,7 +20,7 @@ jobs:
           - os: macos-latest
             command: make test
           - os: windows-latest
-            command: go test -tags "keyring_no1password,keyring_nopass,keyring_nopassage,keyring_noprotonpass" ./...
+            command: make test
     runs-on: ${{ matrix.os }}
     steps:
       - name: Check out source
